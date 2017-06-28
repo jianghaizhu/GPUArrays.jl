@@ -214,7 +214,6 @@ end
 function mapidx{F <: Function, N, T, N2}(f::F, A::CLArray{T, N2}, args::NTuple{N, Any})
     ctx = context(A)
     q = ctx.queue
-    cl.finish(q)
     cl_args = (A, f, args...)
     clfunc = CLFunction(mapidx_kernel, cl_args, q)
     clfunc(cl_args, length(A))
