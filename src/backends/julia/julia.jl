@@ -87,8 +87,8 @@ end
 
 nthreads{T, N}(a::JLArray{T, N}) = context(a).nthreads
 
-Base.@propagate_inbounds Base.getindex{T, N}(A::JLArray{T, N}, i::Integer) = A.buffer[i]
-Base.@propagate_inbounds Base.setindex!{T, N}(A::JLArray{T, N}, val, i::Integer) = (A.buffer[i] = val)
+Base.@propagate_inbounds Base.getindex{T, N}(A::JLArray{T, N}, idx...) = A.buffer[idx...]
+Base.@propagate_inbounds Base.setindex!{T, N}(A::JLArray{T, N}, val, idx...) = (A.buffer[idx...] = val)
 @compat Base.IndexStyle{T, N}(::Type{JLArray{T, N}}) = IndexLinear()
 
 function Base.show(io::IO, ctx::JLContext)
