@@ -4,7 +4,7 @@ using GPUArrays, StaticArrays, FileIO
 # GPU version by Simon Danisch
 
 
-function poincare_inner{N}(rv, result, c, π, ::Val{N}, n)
+function poincare_inner(rv, result, c, π, ::Val{N}, n) where N
     # find next spiking neuron
     ϕ₁, ϕ₂, ϕ₃ = rv[1], rv[2], rv[3]
     πh = π / 2f0

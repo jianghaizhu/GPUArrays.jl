@@ -14,7 +14,7 @@ import Base: copy!, convert
 const gl = GLAbstraction
 
 
-immutable GLContext <: Context
+struct GLContext <: Context
     # There are sadly many types of contexts from different packages.
     # We can't add those packages as a dependency, just to type this field
     window
@@ -66,50 +66,50 @@ function free(x::GLArray)
     gl.free(buffer(x))
 end
 
-function default_buffer_type{T, N}(
+function default_buffer_type(
         ::Type, ::Type{Tuple{T, N}}, ::GLContext
-    )
+    ) where {T, N}
     gl.GLBuffer{T}
 end
-function default_buffer_type{T, N}(
+function default_buffer_type(
         ::Type{<: GPUArray{FT, FN, gl.Texture{FT, FN}} where {FT, FN}},
         ::Type{Tuple{T, N}}, ::GLContext
-    )
+    ) where {T, N}
     gl.Texture{T, N}
 end
 # default_buffer_type{T, N}(::Tuple{T, 2}, ::GLContext) = gl.GLBuffer{T, 1}
 # default_buffer_type{T, N}(::Tuple{T, 3}, ::GLContext) = gl.GLBuffer{T, 1}
 
 
-function (AT::Type{GLArray{T, N, Buffer}}){T, N, Buffer <: gl.GLBuffer}(
+function (AT::Type{GLArray{T, N, Buffer}})(
         size::NTuple{N, Int};
         context = current_context(),
         usage = GL_STATIC_READ, kw_args...
-    )
+    ) where {T, N, Buffer <: gl.GLBuffer}
     buff = gl.GLBuffer(T, prod(size); usage = usage, kw_args...)
     AT(buff, size, context)
 end
 
-function (AT::Type{GLArray{T, N, Buffer}}){T, N, Buffer <: gl.Texture}(
+function (AT::Type{GLArray{T, N, Buffer}})(
         size::NTuple{N, Int};
         context = current_context(), kw_args...
-    )
+    ) where {T, N, Buffer <: gl.Texture}
     tex = gl.Texture(T, size; kw_args...)
     AT(tex, size, context)
 end
 
-function Base.convert{ET, ND}(
+function Base.convert(
         ::Type{GLSampler{ET, ND}},
         A::GLBuffer{ET, ND}
-    )
+    ) where {ET, ND}
     texB = GLSampler{ET, ND}(size(A), context = context(A))
     copy!(buffer(texB), buffer(A))
     texB
 end
-function copy!{T, N}(
+function copy!(
         dest::GLSampler{T, N}, dest_range::CartesianRange{CartesianIndex{N}},
         src::Array{T, N}, src_range::CartesianRange{CartesianIndex{N}},
-    )
+    ) where {T, N}
     copy!(buffer(dest), dest_range, src, src_range)
 end
 
@@ -118,13 +118,13 @@ end
 
 include("glutils.jl")
 
-immutable TransformFeedbackProgram{T, VBO, UNIFORMS, SAMPLERS, N}
+struct TransformFeedbackProgram{T, VBO, UNIFORMS, SAMPLERS, N}
     program::GLuint
     uniforms::Nullable{UniformBuffer{UNIFORMS, N}}
 end
 
 
-function bindlocation{T, N}(A::GLSampler{T, N}, i)
+function bindlocation(A::GLSampler{T, N}, i) where {T, N}
     t = buffer(A)
     glBindImageTexture(i, t.id, 0, GL_FALSE, 0, GL_READ_WRITE, t.internalformat)
 end
@@ -142,9 +142,9 @@ function bindlocation(t::Function, i)
 end
 
 
-function (tfp::TransformFeedbackProgram{T}){T}(
+function (tfp::TransformFeedbackProgram{T})(
         A::GLBuffer{T}, args
-    )
+    ) where T
     buffer_loc = 0
     uniforms = []
     glUseProgram(tfp.program)
@@ -180,7 +180,7 @@ function (tfp::TransformFeedbackProgram{T}){T}(
 end
 
 
-function TransformFeedbackProgram{T}(context, kernel, out::Type{T}, args)
+function TransformFeedbackProgram(context, kernel, out::Type{T}, args) where T
     key = (Symbol(kernel), (out, args...))
     get!(context.program_cache, key) do
         accessors = []

@@ -8,7 +8,7 @@ const AccVecOrMat{T} = Union{AbstractAccArray{T, 1}, AbstractAccArray{T, 2}}
 
 
 
-type GPUArray{T, N, B, C} <: AbstractAccArray{T, N}
+mutable struct GPUArray{T, N, B, C} <: AbstractAccArray{T, N}
     buffer::B
     size::NTuple{N, Int}
     context::C
@@ -26,7 +26,7 @@ context(A::AbstractAccArray) = A.context
 default_buffer_type(typ, context) = error("Found unsupported context: $context")
 
 # GPU Local Memory
-immutable LocalMemory{T} <: AbstractAccArray{T, 1}
+struct LocalMemory{T} <: AbstractAccArray{T, 1}
     size::Int
 end
 
@@ -41,7 +41,7 @@ function linear_index end
 #=
 AbstractArray interface
 =#
-Base.eltype{T}(::AbstractAccArray{T}) = T
+Base.eltype(::AbstractAccArray{T}) where {T} = T
 Base.size(A::AbstractAccArray) = A.size
 
 function Base.show(io::IO, mt::MIME"text/plain", A::AbstractAccArray)
@@ -52,25 +52,25 @@ function Base.showcompact(io::IO, mt::MIME"text/plain", A::AbstractAccArray)
     showcompact(io, mt, Array(A))
 end
 
-function Base.similar{T <: AbstractAccArray}(x::T)
+function Base.similar(x::T) where T <: AbstractAccArray
     similar(x, eltype(x), size(x))
 end
-function Base.similar{T <: AbstractAccArray, ET}(x::T, ::Type{ET}; kw_args...)
+function Base.similar(x::T, ::Type{ET}; kw_args...) where {T <: AbstractAccArray, ET}
     similar(x, ET, size(x); kw_args...)
 end
-function Base.similar{T <: AbstractAccArray, N}(x::T, dims::NTuple{N, Int}; kw_args...)
+function Base.similar(x::T, dims::NTuple{N, Int}; kw_args...) where {T <: AbstractAccArray, N}
     similar(x, eltype(x), dims; kw_args...)
 end
-function Base.similar{N, ET}(x::AbstractAccArray, ::Type{ET}, sz::NTuple{N, Int}; kw_args...)
+function Base.similar(x::AbstractAccArray, ::Type{ET}, sz::NTuple{N, Int}; kw_args...) where {N, ET}
     similar(typeof(x), ET, sz, context = context(x); kw_args...)
 end
 
 
 using Compat.TypeUtils
-function Base.similar{T <: GPUArray, ET, N}(
+function Base.similar(
         ::Type{T}, ::Type{ET}, sz::NTuple{N, Int};
         context::Context = current_context(), kw_args...
-    )
+    ) where {T <: GPUArray, ET, N}
     bt = default_buffer_type(T, Tuple{ET, N}, context)
     GPUArray{ET, N, bt, typeof(context)}(sz; context = context)
 end
@@ -83,27 +83,27 @@ end
 #=
 Host to Device data transfers
 =#
-function (::Type{A}){A <: AbstractAccArray}(x::AbstractArray)
+function (::Type{A})(x::AbstractArray) where A <: AbstractAccArray
     A(collect(x))
 end
-function (::Type{A}){A <: AbstractAccArray}(x::Array; kw_args...)
+function (::Type{A})(x::Array; kw_args...) where A <: AbstractAccArray
     out = similar(A, eltype(x), size(x); kw_args...)
     copy!(out, x)
     out
 end
-Base.convert{A <: AbstractAccArray}(::Type{A}, x::AbstractArray) = A(x)
-Base.convert{A <: AbstractAccArray}(::Type{A}, x::A) = x
+Base.convert(::Type{A}, x::AbstractArray) where {A <: AbstractAccArray} = A(x)
+Base.convert(::Type{A}, x::A) where {A <: AbstractAccArray} = x
 
 #=
 Device to host data transfers
 =#
-function (::Type{Array}){T, N}(device_array::AbstractAccArray{T, N})
+function Array(device_array::AbstractAccArray{T, N}) where {T, N}
     Array{T, N}(device_array)
 end
-function (AT::Type{Array{T, N}}){T, N}(device_array::AbstractAccArray)
+function (AT::Type{Array{T, N}})(device_array::AbstractAccArray) where {T, N}
     convert(AT, Array(device_array))
 end
-function (AT::Type{Array{T, N}}){T, N}(device_array::AbstractAccArray{T, N})
+function (AT::Type{Array{T, N}})(device_array::AbstractAccArray{T, N}) where {T, N}
     hostarray = similar(AT, size(device_array))
     copy!(hostarray, device_array)
     hostarray
@@ -146,18 +146,18 @@ startvalue(::typeof(Base.scalarmin), T) = typemax(T)
 startvalue(::typeof(Base.scalarmax), T) = typemin(T)
 
 # TODO widen and support Int64 and use Base.r_promote_type
-gpu_promote_type{T}(op, ::Type{T}) = T
-gpu_promote_type{T<:Base.WidenReduceResult}(op, ::Type{T}) = T
-gpu_promote_type{T<:Base.WidenReduceResult}(::typeof(+), ::Type{T}) = T
-gpu_promote_type{T<:Base.WidenReduceResult}(::typeof(*), ::Type{T}) = T
-gpu_promote_type{T<:Number}(::typeof(+), ::Type{T}) = typeof(zero(T)+zero(T))
-gpu_promote_type{T<:Number}(::typeof(*), ::Type{T}) = typeof(one(T)*one(T))
-gpu_promote_type{T<:Base.WidenReduceResult}(::typeof(Base.scalarmax), ::Type{T}) = T
-gpu_promote_type{T<:Base.WidenReduceResult}(::typeof(Base.scalarmin), ::Type{T}) = T
-gpu_promote_type{T<:Base.WidenReduceResult}(::typeof(max), ::Type{T}) = T
-gpu_promote_type{T<:Base.WidenReduceResult}(::typeof(min), ::Type{T}) = T
+gpu_promote_type(op, ::Type{T}) where {T} = T
+gpu_promote_type(op, ::Type{T}) where {T<:Base.WidenReduceResult} = T
+gpu_promote_type(::typeof(+), ::Type{T}) where {T<:Base.WidenReduceResult} = T
+gpu_promote_type(::typeof(*), ::Type{T}) where {T<:Base.WidenReduceResult} = T
+gpu_promote_type(::typeof(+), ::Type{T}) where {T<:Number} = typeof(zero(T)+zero(T))
+gpu_promote_type(::typeof(*), ::Type{T}) where {T<:Number} = typeof(one(T)*one(T))
+gpu_promote_type(::typeof(Base.scalarmax), ::Type{T}) where {T<:Base.WidenReduceResult} = T
+gpu_promote_type(::typeof(Base.scalarmin), ::Type{T}) where {T<:Base.WidenReduceResult} = T
+gpu_promote_type(::typeof(max), ::Type{T}) where {T<:Base.WidenReduceResult} = T
+gpu_promote_type(::typeof(min), ::Type{T}) where {T<:Base.WidenReduceResult} = T
 
-function Base.mapreduce{T, N}(f::Function, op::Function, A::AbstractAccArray{T, N})
+function Base.mapreduce(f::Function, op::Function, A::AbstractAccArray{T, N}) where {T, N}
     OT = gpu_promote_type(op, T)
     v0 = startvalue(op, OT) # TODO do this better
     mapreduce(f, op, v0, A)
@@ -177,12 +177,12 @@ end
 ############################################
 # Constructor
 
-function Base.fill!{T, N}(A::AbstractAccArray{T, N}, val)
+function Base.fill!(A::AbstractAccArray{T, N}, val) where {T, N}
     valconv = T(val)
     gpu_call(const_kernel2, A, (A, valconv, Cuint(length(A))))
     A
 end
-function Base.rand{T <: AbstractAccArray, ET}(::Type{T}, ::Type{ET}, size...)
+function Base.rand(::Type{T}, ::Type{ET}, size...) where {T <: AbstractAccArray, ET}
     T(rand(ET, size...))
 end
 
@@ -198,11 +198,11 @@ else
     error("No Serialization type found. Probably unsupported Julia version")
 end
 
-function Base.serialize{T <: GPUArray}(s::BaseSerializer, t::T)
+function Base.serialize(s::BaseSerializer, t::T) where T <: GPUArray
     Base.serialize_type(s, T)
     serialize(s, Array(t))
 end
-function Base.deserialize{T <: GPUArray}(s::BaseSerializer, ::Type{T})
+function Base.deserialize(s::BaseSerializer, ::Type{T}) where T <: GPUArray
     A = deserialize(s)
     T(A)
 end
@@ -235,14 +235,14 @@ crange(start, stop) = CartesianRange(CartesianIndex(start), CartesianIndex(stop)
 
 #Hmmm... why is this not part of the Array constructors???
 #TODO Figure out or issue THEM JULIA CORE PEOPLE SO HARD ... or PR? Who'd know
-function array_convert{T, N}(t::Type{Array{T, N}}, x::Array)
+function array_convert(t::Type{Array{T, N}}, x::Array) where {T, N}
     convert(t, x)
 end
 
 
-array_convert{T, N}(t::Type{Array{T, N}}, x::T) = [x]
+array_convert(t::Type{Array{T, N}}, x::T) where {T, N} = [x]
 
-function array_convert{T, N, T2}(t::Type{Array{T, N}}, x::T2)
+function array_convert(t::Type{Array{T, N}}, x::T2) where {T, N, T2}
     arr = collect(x) # iterator
     dims = ntuple(Val{N}) do i
         ifelse(ndims(arr) >= i, size(arr, i), 1)
@@ -261,18 +261,18 @@ for (D, S) in ((AbstractAccArray, AbstractArray), (AbstractArray, AbstractAccArr
                 unpack_buffer(src), soffset, amount
             )
         end
-        function copy!{T, N}(
+        function copy!(
                 dest::$D{T, N}, rdest::NTuple{N, UnitRange},
                 src::$S{T, N}, ssrc::NTuple{N, UnitRange},
-            )
+            ) where {T, N}
             drange = crange(start.(rdest), last.(rdest))
             srange = crange(start.(ssrc), last.(ssrc))
             copy!(dest, drange, src, srange)
         end
-        function copy!{T}(
+        function copy!(
                 dest::$D{T, 1}, d_range::CartesianRange{CartesianIndex{1}},
                 src::$S{T, 1}, s_range::CartesianRange{CartesianIndex{1}},
-            )
+            ) where T
             amount = length(d_range)
             if length(s_range) != amount
                 throw(ArgumentError("Copy range needs same length. Found: dest: $amount, src: $(length(s_range))"))
@@ -288,9 +288,9 @@ for (D, S) in ((AbstractAccArray, AbstractArray), (AbstractArray, AbstractAccArr
         #     )
         #     copy!(unpack_buffer(dest), rdest, unpack_buffer(src), ssrc)
         # end
-        function copy!{T, N}(
+        function copy!(
                 dest::$D{T, N}, src::$S{T, N}
-            )
+            ) where {T, N}
             len = length(src)
             len == 0 && return dest
             if length(dest) > len
@@ -314,10 +314,10 @@ function copy_kernel!(state, dest, dest_offsets, src, src_offsets, shape, shape_
     return
 end
 
-function copy!{T, N}(
+function copy!(
         dest::AbstractAccArray{T, N}, destcrange::CartesianRange{CartesianIndex{N}},
         src::AbstractAccArray{T, N}, srccrange::CartesianRange{CartesianIndex{N}}
-    )
+    ) where {T, N}
     shape = size(destcrange)
     if shape != size(srccrange)
         throw(DimensionMismatch("Ranges don't match their size. Found: $shape, $(size(srccrange))"))
@@ -335,10 +335,10 @@ function copy!{T, N}(
 end
 
 
-function copy!{T, N}(
+function copy!(
         dest::AbstractAccArray{T, N}, destcrange::CartesianRange{CartesianIndex{N}},
         src::AbstractArray{T, N}, srccrange::CartesianRange{CartesianIndex{N}}
-    )
+    ) where {T, N}
     # Is this efficient? Maybe!
     # TODO: compare to a pure intrinsic copy implementation!
     # this would mean looping over linear sections of memory and
@@ -350,10 +350,10 @@ function copy!{T, N}(
 end
 
 
-function copy!{T, N}(
+function copy!(
         dest::AbstractArray{T, N}, destcrange::CartesianRange{CartesianIndex{N}},
         src::AbstractAccArray{T, N}, srccrange::CartesianRange{CartesianIndex{N}}
-    )
+    ) where {T, N}
     # Is this efficient? Maybe!
     dest_gpu = similar(src, size(destcrange))
     nrange = CartesianRange(one(CartesianIndex{N}), CartesianIndex(size(dest_gpu)))
@@ -369,7 +369,7 @@ indexlength(A, i, array::AbstractArray) = length(array)
 indexlength(A, i, array::Number) = 1
 indexlength(A, i, array::Colon) = size(A, i)
 
-function Base.setindex!{T, N}(A::AbstractAccArray{T, N}, value, indexes...)
+function Base.setindex!(A::AbstractAccArray{T, N}, value, indexes...) where {T, N}
     # similarly, value should always be a julia array
     shape = ntuple(Val{N}) do i
         indexlength(A, i, indexes[i])
@@ -388,7 +388,7 @@ function Base.setindex!{T, N}(A::AbstractAccArray{T, N}, value, indexes...)
     return
 end
 
-function Base.getindex{T, N}(A::AbstractAccArray{T, N}, indexes...)
+function Base.getindex(A::AbstractAccArray{T, N}, indexes...) where {T, N}
     cindexes = Base.to_indices(A, indexes)
     # similarly, value should always be a julia array
     # We shouldn't really bother about checkbounds performance, since setindex/getindex will always be relatively slow
@@ -409,12 +409,12 @@ end
 
 #Broadcast
 Base.@propagate_inbounds broadcast_index(::Val{false}, arg, shape, i) = arg
-Base.@propagate_inbounds function broadcast_index{T, N}(
+Base.@propagate_inbounds function broadcast_index(
         ::Val{true}, arg::AbstractArray{T, N}, shape::NTuple{N, Integer}, i
-    )
+    ) where {T, N}
     @inbounds return arg[i]
 end
-@generated function broadcast_index{T, N}(::Val{true}, arg::AbstractArray{T, N}, shape, i)
+@generated function broadcast_index(::Val{true}, arg::AbstractArray{T, N}, shape, i) where {T, N}
     idx = []
     for i = 1:N
         push!(idx, :(s[$i] < shape[$i] ? 1 : idx[$i]))
@@ -427,9 +427,9 @@ end
     end
 end
 Base.@propagate_inbounds broadcast_index(arg, shape, i) = arg
-Base.@propagate_inbounds function broadcast_index{T, N}(
+Base.@propagate_inbounds function broadcast_index(
         arg::AbstractArray{T, N}, shape::NTuple{N, Integer}, i
-    )
+    ) where {T, N}
     return arg[i]
 end
 Base.@propagate_inbounds function broadcast_index(
@@ -437,7 +437,7 @@ Base.@propagate_inbounds function broadcast_index(
     )
     return arg[i]
 end
-@generated function broadcast_index{T, N}(arg::AbstractArray{T, N}, shape, i)
+@generated function broadcast_index(arg::AbstractArray{T, N}, shape, i) where {T, N}
     idx = []
     for i = 1:N
         push!(idx, :(ifelse(s[$i] < shape[$i], 1, idx[$i])))

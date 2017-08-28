@@ -2,7 +2,7 @@
 # (the familiar mandelbrot set is obtained by setting c==z initially)
 
 # generated functions allow you to emit specialized code for the argument types.
-@generated function julia{N}(z, maxiter::Val{N} = Val{16}())
+@generated function julia(z, maxiter::Val{N} = Val{16}()) where N
     unrolled = Expr(:block)
     for i=1:N
         push!(unrolled.args, quote

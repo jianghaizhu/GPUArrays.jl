@@ -1,6 +1,6 @@
 using GPUArrays
 
-function mandelbulb{T}(x0::T, y0::T, z0::T, n, iter)
+function mandelbulb(x0::T, y0::T, z0::T, n, iter) where T
     x,y,z = x0,y0,z0
     for i = 1:iter
         r = sqrt(x*x + y*y + z*z)

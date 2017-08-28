@@ -16,7 +16,7 @@ function mkstemps(suffix::AbstractString)
 end
 
 
-type CompileError <: Base.WrappedException
+mutable struct CompileError <: Base.WrappedException
     message::String
     error
 end

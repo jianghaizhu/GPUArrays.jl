@@ -29,10 +29,10 @@ end
 
 for elty in (Float64, Float32)
     @eval begin
-        function Base.BLAS.scal!{N}(
+        function Base.BLAS.scal!(
                 n::Integer, DA::$elty,
                 DX::AbstractAccArray{$elty, N}, incx::Integer
-            )
+            ) where N
             ctx = context(DX)
             blasmod = blas_module(ctx)
             blasmod.scal!(n, DA, blasbuffer(ctx, DX), incx)

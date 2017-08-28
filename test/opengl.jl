@@ -7,7 +7,7 @@ ctx = GLBackend.init()
 
 
 # more complex function for broadcast
-function test{T}(a::T, b)
+function test(a::T, b) where T
     x = sqrt(sin(a) * b) / T(10.0)
     y = T(33.0)x + cos(b)
     y * T(10.0)

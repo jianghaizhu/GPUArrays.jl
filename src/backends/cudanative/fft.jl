@@ -9,9 +9,9 @@ import CUFFT
 #const plan_dict = Dict()
 import Base: *, plan_ifft!, plan_fft!, plan_fft, plan_ifft, size, plan_bfft, plan_bfft!
 
-immutable CUFFTPlan{Direction, Inplace, T, N, P <: CUFFT.Plan} <: Base.FFTW.FFTWPlan{T, Direction, Inplace}
+struct CUFFTPlan{Direction, Inplace, T, N, P <: CUFFT.Plan} <: Base.FFTW.FFTWPlan{T, Direction, Inplace}
     plan::P
-    function (::Type{CUFFTPlan{Direction, Inplace}})(dest::CUArray{T, N}, src = dest) where {T, N, Direction, Inplace}
+    function CUFFTPlan{Direction, Inplace}(dest::CUArray{T, N}, src = dest) where {T, N, Direction, Inplace}
         ctx = context(dest)
         p = Cint[0]
         sz = CUFFT.plan_size(dest, src)

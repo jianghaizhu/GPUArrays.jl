@@ -8,7 +8,7 @@ import GPUArrays: mapidx, AbstractAccArray
     abs(comp2(a) - comp2(b)) +
     abs(comp3(a) - comp3(b))
 end
-function labeldata{T}(val, means, k::T)
+function labeldata(val, means, k::T) where T
     label = T(0); mindist = Float32(Inf)
     @inbounds for ki = T(1):k
         dist = euclidian(means[ki], val)
@@ -20,7 +20,7 @@ function labeldata{T}(val, means, k::T)
     return UInt8(label)
 end
 
-@inline function meancount{T}(v::T, label, k)
+@inline function meancount(v::T, label, k) where T
     count = UInt32(label == k)
     countf = Float32(count)
     (v * countf, count)
@@ -45,7 +45,7 @@ function clustersmoved(prev_means, thrr_means)
         UInt32(0), prev_means, thrr_means
     )
 end
-function kmeans{T <: AbstractAccArray}(A::T, initialmeans, iter = 10)
+function kmeans(A::T, initialmeans, iter = 10) where T <: AbstractAccArray
     means = identity.(initialmeans)
     n = length(A); CT = eltype(T); ET = eltype(CT); k = length(means)
     labels = map(x-> UInt8(0), A)

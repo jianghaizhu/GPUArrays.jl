@@ -84,7 +84,7 @@ arg_length(x) = ()
 
 abstract type BroadcastDescriptor{Typ} end
 
-immutable BroadcastDescriptorN{Typ, N} <: BroadcastDescriptor{Typ}
+struct BroadcastDescriptorN{Typ, N} <: BroadcastDescriptor{Typ}
     size::NTuple{N, Cuint}
     keep::NTuple{N, Cuint}
     idefault::NTuple{N, Cuint}
@@ -171,30 +171,30 @@ for N = 0:10
 
 end
 
-function mapidx{N}(f, A::AbstractAccArray, args::NTuple{N, Any})
+function mapidx(f, A::AbstractAccArray, args::NTuple{N, Any}) where N
     gpu_call(mapidx_kernel, A, (f, A, Cuint(length(A)), args...))
 end
 # Base functions that are sadly not fit for the the GPU yet (they only work for Int64)
-@pure @noinline function gpu_ind2sub{N, T}(dims::NTuple{N}, ind::T)
+@pure @noinline function gpu_ind2sub(dims::NTuple{N}, ind::T) where {N, T}
     _ind2sub(NTuple{N, T}(dims), ind - T(1))
 end
-@pure @inline _ind2sub{T}(::Tuple{}, ind::T) = (ind + T(1),)
-@pure @inline function _ind2sub{T}(indslast::NTuple{1}, ind::T)
+@pure @inline _ind2sub(::Tuple{}, ind::T) where {T} = (ind + T(1),)
+@pure @inline function _ind2sub(indslast::NTuple{1}, ind::T) where T
     ((ind + T(1)),)
 end
-@pure @inline function _ind2sub{T}(inds, ind::T)
+@pure @inline function _ind2sub(inds, ind::T) where T
     r1 = inds[1]
     indnext = div(ind, r1)
     f = T(1); l = r1
     (ind-l*indnext+f, _ind2sub(Base.tail(inds), indnext)...)
 end
 
-@pure function gpu_sub2ind{N, T}(dims::NTuple{N}, I::NTuple{N, T})
+@pure function gpu_sub2ind(dims::NTuple{N}, I::NTuple{N, T}) where {N, T}
     Base.@_inline_meta
     _sub2ind(NTuple{N, T}(dims), T(1), T(1), I...)
 end
 _sub2ind(x, L, ind) = ind
-function _sub2ind{T}(::Tuple{}, L, ind, i::T, I::T...)
+function _sub2ind(::Tuple{}, L, ind, i::T, I::T...) where T
     Base.@_inline_meta
     ind + (i - T(1)) * L
 end
@@ -211,7 +211,7 @@ end
 @pure newindex(I::NTuple{1}, ilin, keep::NTuple{1}, Idefault, size) = ilin
 
 # differently shaped arrays
-@generated function newindex{N, T}(I, ilin::T, keep::NTuple{N}, Idefault, size)
+@generated function newindex(I, ilin::T, keep::NTuple{N}, Idefault, size) where {N, T}
     exprs = Expr(:tuple)
     for i = 1:N
         push!(exprs.args, :(Bool(keep[$i]) ? T(I[$i]) : T(Idefault[$i])))

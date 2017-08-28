@@ -10,7 +10,7 @@ import GPUArrays: unsafe_reinterpret, broadcast_index, linear_index
 
 import Base.Threads: @threads
 
-immutable JLContext <: Context
+struct JLContext <: Context
     nthreads::Int
 end
 
@@ -27,19 +27,19 @@ let contexts = JLContext[]
 end
 
 
-immutable Sampler{T, N, Buffer} <: AbstractSampler{T, N}
+struct Sampler{T, N, Buffer} <: AbstractSampler{T, N}
     buffer::Buffer
     size::SVector{N, Float32}
 end
-Base.IndexStyle{T, N}(::Type{Sampler{T, N}}) = IndexLinear()
-(AT::Type{Array}){T, N, B}(s::Sampler{T, N, B}) = parent(parent(buffer(s)))
+Base.IndexStyle(::Type{Sampler{T, N}}) where {T, N} = IndexLinear()
+(AT::Type{Array})(s::Sampler{T, N, B}) where {T, N, B} = parent(parent(buffer(s)))
 
-function Sampler{T, N}(A::Array{T, N}, interpolation = Linear(), edge = Flat())
+function Sampler(A::Array{T, N}, interpolation = Linear(), edge = Flat()) where {T, N}
     Ai = extrapolate(interpolate(A, BSpline(interpolation), OnCell()), edge)
     Sampler{T, N, typeof(Ai)}(Ai, SVector{N, Float32}(size(A)) - 1f0)
 end
 
-@generated function Base.getindex{T, B, N, IF <: AbstractFloat}(A::Sampler{T, N, B}, idx::StaticVector{N, IF})
+@generated function Base.getindex(A::Sampler{T, N, B}, idx::StaticVector{N, IF}) where {T, B, N, IF <: AbstractFloat}
     quote
         scaled = idx .* A.size + 1f0
         A.buffer[$(ntuple(i-> :(scaled[$i]), Val{N})...)] # why does splatting not work -.-
@@ -54,19 +54,19 @@ end
 
 const JLArray{T, N} = GPUArray{T, N, Array{T, N}, JLContext}
 
-default_buffer_type{T, N}(::Type, ::Type{Tuple{T, N}}, ::JLContext) = Array{T, N}
+default_buffer_type(::Type, ::Type{Tuple{T, N}}, ::JLContext) where {T, N} = Array{T, N}
 
-function (AT::Type{JLArray{T, N}}){T, N}(
+function (AT::Type{JLArray{T, N}})(
         size::NTuple{N, Int};
         context = current_context(),
         kw_args...
-    )
+    ) where {T, N}
     # cuda doesn't allow a size of 0, but since the length of the underlying buffer
     # doesn't matter, with can just initilize it to 0
     AT(Array{T, N}(size), size, context)
 end
 
-function Base.similar{T, N, ET}(x::JLArray{T, N}, ::Type{ET}, sz::NTuple{N, Int}; kw_args...)
+function Base.similar(x::JLArray{T, N}, ::Type{ET}, sz::NTuple{N, Int}; kw_args...) where {T, N, ET}
     ctx = context(x)
     b = similar(buffer(x), ET, sz)
     GPUArray{ET, N, typeof(b), typeof(ctx)}(b, sz, ctx)
@@ -80,22 +80,22 @@ function unsafe_reinterpret(::Type{T}, A::JLArray{ET}, dims::NTuple{N, Integer})
     GPUArray{T, length(dims), typeof(newbuff), typeof(ctx)}(newbuff, dims, ctx)
 end
 
-function (::Type{JLArray}){T, N}(A::Array{T, N})
+function JLArray(A::Array{T, N}) where {T, N}
     JLArray{T, N}(A, size(A), current_context())
 end
 
-function (AT::Type{Array{T, N}}){T, N}(A::JLArray{T, N})
+function (AT::Type{Array{T, N}})(A::JLArray{T, N}) where {T, N}
     buffer(A)
 end
-function (::Type{A}){A <: JLArray, T, N}(x::Array{T, N})
+function (::Type{A})(x::Array{T, N}) where {A <: JLArray, T, N}
     JLArray{T, N}(x, size(x), current_context())
 end
 
-nthreads{T, N}(a::JLArray{T, N}) = context(a).nthreads
+nthreads(a::JLArray{T, N}) where {T, N} = context(a).nthreads
 
-Base.@propagate_inbounds Base.getindex{T, N}(A::JLArray{T, N}, i::Integer) = A.buffer[i]
-Base.@propagate_inbounds Base.setindex!{T, N}(A::JLArray{T, N}, val, i::Integer) = (A.buffer[i] = val)
-Base.IndexStyle{T, N}(::Type{JLArray{T, N}}) = IndexLinear()
+Base.@propagate_inbounds Base.getindex(A::JLArray{T, N}, i::Integer) where {T, N} = A.buffer[i]
+Base.@propagate_inbounds Base.setindex!(A::JLArray{T, N}, val, i::Integer) where {T, N} = (A.buffer[i] = val)
+Base.IndexStyle(::Type{JLArray{T, N}}) where {T, N} = IndexLinear()
 
 function Base.show(io::IO, ctx::JLContext)
     cpu = Sys.cpu_info()
@@ -118,7 +118,7 @@ for i = 0:7
     fidxargs = ntuple(x-> :(args[$x]), i)
     @eval begin
 
-        function mapidx{F, T, N}(f::F, data::JLArray{T, N}, args::NTuple{$i, Any})
+        function mapidx(f::F, data::JLArray{T, N}, args::NTuple{$i, Any}) where {F, T, N}
             for i in eachindex(data)
                 f(i, data, $(fidxargs...))
             end
@@ -132,7 +132,7 @@ for i = 0:7
             end
             @inbounds arr[threadid] = r
         end
-        function acc_mapreduce{T, N}(f, op, v0, A::JLArray{T, N}, args::NTuple{$i, Any})
+        function acc_mapreduce(f, op, v0, A::JLArray{T, N}, args::NTuple{$i, Any}) where {T, N}
             n = Base.Threads.nthreads()
             arr = Vector{typeof(op(v0, v0))}(n)
             slice = ceil(Int, length(A) / n)

@@ -16,7 +16,7 @@ import GPUArrays: default_buffer_type, broadcast_index, unsafe_reinterpret
 using Transpiler
 import Transpiler: cli, CLFunction, cli.get_global_id
 
-immutable CLContext <: Context
+struct CLContext <: Context
     device::cl.Device
     context::cl.Context
     queue::cl.CmdQueue
@@ -75,11 +75,11 @@ end
 const CLArray{T, N} = GPUArray{T, N, B, CLContext} where B <: cl.Buffer
 
 #synchronize
-function synchronize{T, N}(x::CLArray{T, N})
+function synchronize(x::CLArray{T, N}) where {T, N}
     cl.finish(context(x).queue) # TODO figure out the diverse ways of synchronization
 end
 
-function free{T, N}(x::CLArray{T, N})
+function free(x::CLArray{T, N}) where {T, N}
     synchronize(x)
     mem = buffer(x)
     finalize(mem)
@@ -110,10 +110,10 @@ function cl_writebuffer(q, buf, dev_offset, hostref, nbytes)
     )
 end
 
-function Base.copy!{T}(
+function Base.copy!(
         dest::Array{T}, d_offset::Integer,
         source::CLArray{T}, s_offset::Integer, amount::Integer
-    )
+    ) where T
     amount == 0 && return dest
     s_offset = (s_offset - 1) * sizeof(T)
     q = context(source).queue
@@ -122,10 +122,10 @@ function Base.copy!{T}(
     dest
 end
 
-function Base.copy!{T}(
+function Base.copy!(
         dest::CLArray{T}, d_offset::Integer,
         source::Array{T}, s_offset::Integer, amount::Integer
-    )
+    ) where T
     amount == 0 && return dest
     q = context(dest).queue
     cl.finish(q)
@@ -144,10 +144,10 @@ function Base.copy!{T}(
 end
 
 
-function Base.copy!{T}(
+function Base.copy!(
         dest::CLArray{T}, d_offset::Integer,
         src::CLArray{T}, s_offset::Integer, amount::Integer
-    )
+    ) where T
     amount == 0 && return dest
     q = context(dest).queue
     cl.finish(q)
@@ -162,7 +162,7 @@ function Base.copy!{T}(
 end
 
 
-default_buffer_type{T, N}(::Type, ::Type{Tuple{T, N}}, ::CLContext) = cl.Buffer{T}
+default_buffer_type(::Type, ::Type{Tuple{T, N}}, ::CLContext) where {T, N} = cl.Buffer{T}
 
 
 
@@ -193,24 +193,24 @@ end
 
 
 # extend the private interface for the compilation types
-Transpiler._to_cl_types{T, N}(arg::CLArray{T, N}) = cli.CLArray{T, N}
-Transpiler._to_cl_types{T}(x::LocalMemory{T}) = cli.LocalMemory{T}
+Transpiler._to_cl_types(arg::CLArray{T, N}) where {T, N} = cli.CLArray{T, N}
+Transpiler._to_cl_types(x::LocalMemory{T}) where {T} = cli.LocalMemory{T}
 
 Transpiler._to_cl_types(x::Ref{<: CLArray}) = Transpiler._to_cl_types(x[])
 Transpiler.cl_convert(x::Ref{<: CLArray}) = Transpiler.cl_convert(x[])
 Transpiler.cl_convert(x::CLArray) = buffer(x)
-Transpiler.cl_convert{T}(x::LocalMemory{T}) = cl.LocalMem(T, x.size)
+Transpiler.cl_convert(x::LocalMemory{T}) where {T} = cl.LocalMem(T, x.size)
 
-function CLFunction{T, N}(A::CLArray{T, N}, f, args...)
+function CLFunction(A::CLArray{T, N}, f, args...) where {T, N}
     ctx = context(A)
     CLFunction(f, args, ctx.queue)
 end
-function (clfunc::CLFunction{T}){T, T2, N}(A::CLArray{T2, N}, args...)
+function (clfunc::CLFunction{T})(A::CLArray{T2, N}, args...) where {T, T2, N}
     # TODO use better heuristic
     clfunc(args, length(A))
 end
 
-function gpu_call{T, N}(f, A::CLArray{T, N}, args, globalsize = length(A), localsize = nothing)
+function gpu_call(f, A::CLArray{T, N}, args, globalsize = length(A), localsize = nothing) where {T, N}
     ctx = GPUArrays.context(A)
     _args = if !isa(f, Tuple{String, Symbol})
         (0f0, args...)# include "state"
@@ -246,9 +246,9 @@ using Transpiler.cli: get_local_size, get_global_size, get_group_id
 using OpenCL
 
 # TODO generalize to CUDAnative
-function transpose_kernel!{BLOCK}(
+function transpose_kernel!(
         At, A, width, height, A_local, ::Val{BLOCK}
-    )
+    ) where BLOCK
     base_idx_a = get_group_id(0) * BLOCK + get_group_id(1) * (BLOCK * width)
     base_idx_a_t = get_group_id(1) * BLOCK + get_group_id(0) * (BLOCK * height)
 
@@ -263,7 +263,7 @@ function transpose_kernel!{BLOCK}(
     return
 end
 
-function Base.transpose!{T}(At::CLArray{T, 2}, A::CLArray{T, 2})
+function Base.transpose!(At::CLArray{T, 2}, A::CLArray{T, 2}) where T
     ctx = context(A)
     block_size = cl.max_block_size(ctx.queue, size(A, 1), size(A, 2))
     outsize = map(Int32, size(At))
@@ -312,9 +312,9 @@ for i = 0:10
     end
 end
 
-function acc_mapreduce{T, OT, N}(
+function acc_mapreduce(
         f, op, v0::OT, A::CLArray{T, N}, rest::Tuple
-    )
+    ) where {T, OT, N}
     dev = context(A).device
     block_size = 16
     group_size = ceil(Int, length(A) / block_size)

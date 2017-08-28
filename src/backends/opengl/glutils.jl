@@ -1,7 +1,7 @@
 
-is_struct{T}(::Type{T}) = !(sizeof(T) != 0 && nfields(T) == 0)
-is_glsl_primitive{T <: StaticVector}(::Type{T}) = true
-is_glsl_primitive{T <: Union{Float32, Int32}}(::Type{T}) = true
+is_struct(::Type{T}) where {T} = !(sizeof(T) != 0 && nfields(T) == 0)
+is_glsl_primitive(::Type{T}) where {T <: StaticVector} = true
+is_glsl_primitive(::Type{T}) where {T <: Union{Float32, Int32}} = true
 is_glsl_primitive(T) = false
 
 const max_batch_size = 1024
@@ -11,14 +11,14 @@ Statically sized uniform buffer.
 Supports push!, but with fixed memory, so it will error after reaching
 it's preallocated length.
 """
-type UniformBuffer{T, N}
+mutable struct UniformBuffer{T, N}
     buffer::GLBuffer{T}
     offsets::NTuple{N, Int}
     elementsize::Int
     length::Int
 end
 const GLSLScalarTypes = Union{Float32, Int32, UInt32}
-Base.eltype{T, N}(::UniformBuffer{T, N}) = T
+Base.eltype(::UniformBuffer{T, N}) where {T, N} = T
 
 
 function glsl_alignement_size(T)
@@ -44,7 +44,7 @@ function glsl_alignement_size(T)
     error("Struct $T not supported yet. Please help by implementing all rules from https://khronos.org/registry/OpenGL/specs/gl/glspec45.core.pdf#page=159")
 end
 
-function std140_offsets{T}(::Type{T})
+function std140_offsets(::Type{T}) where T
     elementsize = 0
     offsets = if T <: GLSLScalarTypes
         elementsize = sizeof(T)
@@ -71,7 +71,7 @@ end
     Pre allocates an empty buffer with `max_batch_size` size
     which can be used to store multiple uniform blocks of type T
 """
-function UniformBuffer{T}(::Type{T}, max_batch_size = 1024, mode = GL_STATIC_DRAW)
+function UniformBuffer(::Type{T}, max_batch_size = 1024, mode = GL_STATIC_DRAW) where T
     offsets, elementsize = std140_offsets(T)
     buffer = GLBuffer{T}(
         max_batch_size,
@@ -84,7 +84,7 @@ end
 """
     Creates an Uniform buffer with the contents of `data`
 """
-function UniformBuffer{T}(data::T, mode = GL_STATIC_DRAW)
+function UniformBuffer(data::T, mode = GL_STATIC_DRAW) where T
     buffer = UniformBuffer(T, 1, mode)
     push!(buffer, data)
     buffer
@@ -104,7 +104,7 @@ end
 _getfield(x::GLSLScalarTypes, i) = x
 _getfield(x, i) = getfield(x, i)
 
-function iterate_fields{T, N}(buffer::UniformBuffer{T, N}, x, index)
+function iterate_fields(buffer::UniformBuffer{T, N}, x, index) where {T, N}
     offset = buffer.elementsize * (index - 1)
     x_ref = isimmutable(x) ? Ref(x) : x
     base_ptr = Ptr{UInt8}(pointer_from_objref(x_ref))
@@ -113,7 +113,7 @@ function iterate_fields{T, N}(buffer::UniformBuffer{T, N}, x, index)
     end
 end
 
-function Base.setindex!{T, N}(buffer::UniformBuffer{T, N}, element::T, idx::Integer)
+function Base.setindex!(buffer::UniformBuffer{T, N}, element::T, idx::Integer) where {T, N}
     if idx > length(buffer.buffer)
         throw(BoundsError(buffer, idx))
     end
@@ -130,7 +130,7 @@ end
 
 
 
-function Base.push!{T, N}(buffer::UniformBuffer{T, N}, element::T)
+function Base.push!(buffer::UniformBuffer{T, N}, element::T) where {T, N}
     buffer.length += 1
     buffer[buffer.length] = element
     buffer
@@ -151,10 +151,10 @@ function check_copy_bounds(
 end
 
 
-function copy!{T}(
+function copy!(
         dest::gl.GLBuffer{T}, d_range::CartesianRange{CartesianIndex{1}},
         src::Vector{T}, s_range::CartesianRange{CartesianIndex{1}},
-    )
+    ) where T
     amount = length(d_range)
     if length(s_range) != amount
         throw(ArgumentError("Copy range needs same length. Found: dest: $amount, src: $(length(s_range))"))
@@ -170,10 +170,10 @@ function copy!{T}(
     bind(dest, 0)
 end
 
-function copy!{T}(
+function copy!(
         dest::Vector{T}, d_range::CartesianRange{CartesianIndex{1}},
         src::gl.GLBuffer{T}, s_range::CartesianRange{CartesianIndex{1}},
-    )
+    ) where T
     amount = length(d_range)
     if length(s_range) != amount
         throw(ArgumentError("Copy range needs same length. Found: dest: $amount, src: $(length(s_range))"))
@@ -195,10 +195,10 @@ end
 
 
 # copy between two buffers
-function copy!{T}(
+function copy!(
         dest::gl.GLBuffer{T}, d_range::CartesianRange{CartesianIndex{1}},
         src::gl.GLBuffer{T}, s_range::CartesianRange{CartesianIndex{1}}
-    )
+    ) where T
     amount = length(d_range)
     if length(s_range) != amount
         throw(ArgumentError("Copy range needs same length. Found: dest: $amount, src: $(length(s_range))"))

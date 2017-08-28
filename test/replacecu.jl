@@ -72,7 +72,7 @@ end
 function recursive_test(t)
     cos(t) + deep_recurse(t)
 end
-function haversine{T <: Float32}(lat1::T, lon1::T, lat2::T, lon2::T, radius::T)
+function haversine(lat1::T, lon1::T, lat2::T, lon2::T, radius::T) where T <: Float32
     c1 = cospi(lat1 / 180.0f0)
     c2 = cospi(lat2 / 180.0f0)
     dlat = lat2 - recursive_test(lat1)
